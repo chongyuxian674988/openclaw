@@ -9,7 +9,11 @@ import {
   resolveAgentEffectiveModelPrimary,
   resolveAgentWorkspaceDir,
 } from "openclaw/plugin-sdk/agent-runtime";
-import { resolveSessionStoreEntry, updateSessionStore } from "openclaw/plugin-sdk/config-runtime";
+import {
+  resolveSessionStoreEntry,
+  updateSessionStore,
+  type OpenClawConfig,
+} from "openclaw/plugin-sdk/config-runtime";
 import { definePluginEntry, type OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -51,6 +55,7 @@ const RECALLED_CONTEXT_LINE_PATTERNS = [
 ];
 
 type ActiveRecallPluginConfig = {
+  enabled?: boolean;
   agents?: string[];
   model?: string;
   modelFallbackPolicy?: "default-remote" | "resolved-only";
@@ -79,6 +84,7 @@ type ActiveRecallPluginConfig = {
 };
 
 type ResolvedActiveRecallPluginConfig = {
+  enabled: boolean;
   agents: string[];
   model?: string;
   modelFallbackPolicy: "default-remote" | "resolved-only";
@@ -134,6 +140,12 @@ type ActiveMemoryChatType = "direct" | "group" | "channel";
 type ActiveMemoryToggleStore = {
   sessions?: Record<string, { disabled?: boolean; updatedAt?: number }>;
 };
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
 type ActiveMemoryThinkingLevel =
   | "off"
   | "minimal"
@@ -371,7 +383,46 @@ function formatActiveMemoryCommandHelp(): string {
     "/active-memory status",
     "/active-memory on",
     "/active-memory off",
+    "",
+    "Global config toggle:",
+    "/active-memory status --global",
+    "/active-memory on --global",
+    "/active-memory off --global",
   ].join("\n");
+}
+
+function isActiveMemoryGloballyEnabled(cfg: OpenClawConfig): boolean {
+  const entry = asRecord(cfg.plugins?.entries?.["active-memory"]);
+  if (entry?.enabled === false) {
+    return false;
+  }
+  const pluginConfig = asRecord(entry?.config);
+  return pluginConfig?.enabled !== false;
+}
+
+function updateActiveMemoryGlobalEnabledInConfig(
+  cfg: OpenClawConfig,
+  enabled: boolean,
+): OpenClawConfig {
+  const entries = { ...cfg.plugins?.entries };
+  const existingEntry = asRecord(entries["active-memory"]) ?? {};
+  const existingConfig = asRecord(existingEntry.config) ?? {};
+  entries["active-memory"] = {
+    ...existingEntry,
+    enabled: true,
+    config: {
+      ...existingConfig,
+      enabled,
+    },
+  };
+
+  return {
+    ...cfg,
+    plugins: {
+      ...cfg.plugins,
+      entries,
+    },
+  };
 }
 
 function normalizePluginConfig(pluginConfig: unknown): ResolvedActiveRecallPluginConfig {
@@ -385,6 +436,7 @@ function normalizePluginConfig(pluginConfig: unknown): ResolvedActiveRecallPlugi
       )
     : [];
   return {
+    enabled: raw.enabled !== false,
     agents: Array.isArray(raw.agents)
       ? raw.agents.map((agentId) => String(agentId).trim()).filter(Boolean)
       : [],
@@ -575,6 +627,9 @@ function isEnabledForAgent(
   config: ResolvedActiveRecallPluginConfig,
   agentId: string | undefined,
 ): boolean {
+  if (!config.enabled) {
+    return false;
+  }
   if (!agentId) {
     return false;
   }
@@ -1294,9 +1349,29 @@ export default definePluginEntry({
       description: "Enable, disable, or inspect Active Memory for this session.",
       acceptsArgs: true,
       handler: async (ctx) => {
-        const action = (ctx.args?.trim().split(/\s+/).filter(Boolean)[0] ?? "status").toLowerCase();
+        const tokens = ctx.args?.trim().split(/\s+/).filter(Boolean) ?? [];
+        const isGlobal = tokens.includes("--global");
+        const action = (tokens.find((token) => token !== "--global") ?? "status").toLowerCase();
         if (action === "help") {
           return { text: formatActiveMemoryCommandHelp() };
+        }
+        if (isGlobal) {
+          const currentConfig = api.runtime.config.loadConfig();
+          if (action === "status") {
+            return {
+              text: `Active Memory: ${isActiveMemoryGloballyEnabled(currentConfig) ? "on" : "off"} globally.`,
+            };
+          }
+          if (action === "on" || action === "enable" || action === "enabled") {
+            const nextConfig = updateActiveMemoryGlobalEnabledInConfig(currentConfig, true);
+            await api.runtime.config.writeConfigFile(nextConfig);
+            return { text: "Active Memory: on globally." };
+          }
+          if (action === "off" || action === "disable" || action === "disabled") {
+            const nextConfig = updateActiveMemoryGlobalEnabledInConfig(currentConfig, false);
+            await api.runtime.config.writeConfigFile(nextConfig);
+            return { text: "Active Memory: off globally." };
+          }
         }
         const sessionKey = resolveCommandSessionKey({
           api,

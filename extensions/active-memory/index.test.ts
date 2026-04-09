@@ -37,6 +37,7 @@ describe("active-memory plugin", () => {
   const registeredCommands: Record<string, any> = {};
   const runEmbeddedPiAgent = vi.fn();
   let stateDir = "";
+  let configFile: Record<string, unknown> = {};
   const api: any = {
     pluginConfig: {
       agents: ["main"],
@@ -58,6 +59,12 @@ describe("active-memory plugin", () => {
       state: {
         resolveStateDir: () => stateDir,
       },
+      config: {
+        loadConfig: () => configFile,
+        writeConfigFile: vi.fn(async (nextConfig: Record<string, unknown>) => {
+          configFile = nextConfig;
+        }),
+      },
     },
     registerCommand: vi.fn((command) => {
       registeredCommands[command.name] = command;
@@ -70,6 +77,18 @@ describe("active-memory plugin", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-active-memory-test-"));
+    configFile = {
+      plugins: {
+        entries: {
+          "active-memory": {
+            enabled: true,
+            config: {
+              agents: ["main"],
+            },
+          },
+        },
+      },
+    };
     api.pluginConfig = {
       agents: ["main"],
       logging: true,
@@ -180,6 +199,76 @@ describe("active-memory plugin", () => {
     );
 
     expect(runEmbeddedPiAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports an explicit global active-memory config toggle", async () => {
+    const command = registeredCommands["active-memory"];
+
+    const offResult = await command.handler({
+      channel: "webchat",
+      isAuthorizedSender: true,
+      args: "off --global",
+      commandBody: "/active-memory off --global",
+      config: {},
+      requestConversationBinding: async () => ({ status: "error", message: "unsupported" }),
+      detachConversationBinding: async () => ({ removed: false }),
+      getCurrentConversationBinding: async () => null,
+    });
+
+    expect(offResult.text).toBe("Active Memory: off globally.");
+    expect(api.runtime.config.writeConfigFile).toHaveBeenCalledTimes(1);
+    expect(configFile).toMatchObject({
+      plugins: {
+        entries: {
+          "active-memory": {
+            enabled: true,
+            config: {
+              enabled: false,
+              agents: ["main"],
+            },
+          },
+        },
+      },
+    });
+
+    const statusOffResult = await command.handler({
+      channel: "webchat",
+      isAuthorizedSender: true,
+      args: "status --global",
+      commandBody: "/active-memory status --global",
+      config: {},
+      requestConversationBinding: async () => ({ status: "error", message: "unsupported" }),
+      detachConversationBinding: async () => ({ removed: false }),
+      getCurrentConversationBinding: async () => null,
+    });
+
+    expect(statusOffResult.text).toBe("Active Memory: off globally.");
+
+    const onResult = await command.handler({
+      channel: "webchat",
+      isAuthorizedSender: true,
+      args: "on --global",
+      commandBody: "/active-memory on --global",
+      config: {},
+      requestConversationBinding: async () => ({ status: "error", message: "unsupported" }),
+      detachConversationBinding: async () => ({ removed: false }),
+      getCurrentConversationBinding: async () => null,
+    });
+
+    expect(onResult.text).toBe("Active Memory: on globally.");
+    expect(configFile).toMatchObject({
+      plugins: {
+        entries: {
+          "active-memory": {
+            enabled: true,
+            config: {
+              enabled: true,
+              agents: ["main"],
+            },
+          },
+        },
+      },
+    });
   });
 
   it("does not run for agents that are not explicitly targeted", async () => {

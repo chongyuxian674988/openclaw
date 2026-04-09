@@ -32,6 +32,7 @@ self-contained, safe-default setup:
       "active-memory": {
         enabled: true,
         config: {
+          enabled: true,
           agents: ["main"],
           allowedChatTypes: ["direct"],
           modelFallbackPolicy: "default-remote",
@@ -133,6 +134,19 @@ current chat session without editing config:
 This is session-scoped. It does not change
 `plugins.entries.active-memory.enabled`, agent targeting, or other global
 configuration.
+
+If you want the command to write config and pause or resume active memory for
+all sessions, use the explicit global form:
+
+```text
+/active-memory status --global
+/active-memory off --global
+/active-memory on --global
+```
+
+The global form writes `plugins.entries.active-memory.config.enabled`. It leaves
+`plugins.entries.active-memory.enabled` on so the command remains available to
+turn active memory back on later.
 
 If you want to see what active memory is doing in a live session, turn verbose
 mode on for that session:

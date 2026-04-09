@@ -6,6 +6,7 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "enabled": { "type": "boolean" },
       "agents": {
         "type": "array",
         "items": { "type": "string" }
@@ -56,6 +57,10 @@
     }
   },
   "uiHints": {
+    "enabled": {
+      "label": "Active Memory Recall",
+      "help": "Globally enable or pause Active Memory recall while keeping the plugin command available."
+    },
     "agents": {
       "label": "Target Agents",
       "help": "Explicit agent ids that may use active memory."
