@@ -250,6 +250,10 @@ function resolveSafeTranscriptDir(baseSessionsDir: string, transcriptDir: string
   return candidate;
 }
 
+function resolvePersistentTranscriptBaseDir(api: OpenClawPluginApi): string {
+  return path.join(api.runtime.state.resolveStateDir(), "plugins", "active-memory", "transcripts");
+}
+
 function resolveCanonicalSessionKeyFromSessionId(params: {
   api: OpenClawPluginApi;
   agentId: string;
@@ -1184,23 +1188,18 @@ async function runRecallSubagent(params: {
   const subagentSessionKey = parentSessionKey
     ? `${parentSessionKey}:${subagentSuffix}`
     : `agent:${params.agentId}:${subagentSuffix}`;
-  const storePath = params.api.runtime.agent.session.resolveStorePath(
-    params.api.config.session?.store,
-    {
-      agentId: params.agentId,
-    },
-  );
-  const resolvedStorePath =
-    storePath || path.join(os.tmpdir(), "openclaw-active-memory-sessions.json");
-  const baseSessionsDir = path.dirname(path.resolve(resolvedStorePath));
   const tempDir = params.config.persistTranscripts
     ? undefined
     : await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-active-memory-"));
   const persistedDir = params.config.persistTranscripts
-    ? resolveSafeTranscriptDir(baseSessionsDir, params.config.transcriptDir)
+    ? resolveSafeTranscriptDir(
+        resolvePersistentTranscriptBaseDir(params.api),
+        params.config.transcriptDir,
+      )
     : undefined;
   if (persistedDir) {
-    await fs.mkdir(persistedDir, { recursive: true });
+    await fs.mkdir(persistedDir, { recursive: true, mode: 0o700 });
+    await fs.chmod(persistedDir, 0o700).catch(() => undefined);
   }
   const sessionFile = params.config.persistTranscripts
     ? path.join(persistedDir!, `${subagentSessionId}.jsonl`)

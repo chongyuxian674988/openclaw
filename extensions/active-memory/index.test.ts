@@ -5,6 +5,10 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import plugin from "./index.js";
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const hoisted = vi.hoisted(() => {
   const sessionStore: Record<string, Record<string, unknown>> = {
     "agent:main:main": {
@@ -1219,17 +1223,26 @@ describe("active-memory plugin", () => {
       { agentId: "main", trigger: "user", sessionKey, messageProvider: "webchat" },
     );
 
-    expect(mkdirSpy).toHaveBeenCalledWith("/tmp/active-memory-subagents", { recursive: true });
+    const expectedDir = path.join(
+      stateDir,
+      "plugins",
+      "active-memory",
+      "transcripts",
+      "active-memory-subagents",
+    );
+    expect(mkdirSpy).toHaveBeenCalledWith(expectedDir, { recursive: true, mode: 0o700 });
     expect(mkdtempSpy).not.toHaveBeenCalled();
     expect(runEmbeddedPiAgent.mock.calls.at(-1)?.[0]?.sessionFile).toMatch(
-      /^\/tmp\/active-memory-subagents\/active-memory-[a-z0-9]+-[a-f0-9]{8}\.jsonl$/,
+      new RegExp(
+        `^${escapeRegExp(expectedDir)}${escapeRegExp(path.sep)}active-memory-[a-z0-9]+-[a-f0-9]{8}\\.jsonl$`,
+      ),
     );
     expect(rmSpy).not.toHaveBeenCalled();
     expect(
       vi
         .mocked(api.logger.info)
         .mock.calls.some((call: unknown[]) =>
-          String(call[0]).includes("transcript=/tmp/active-memory-subagents/"),
+          String(call[0]).includes(`transcript=${expectedDir}${path.sep}`),
         ),
     ).toBe(true);
   });
@@ -1254,9 +1267,18 @@ describe("active-memory plugin", () => {
       },
     );
 
-    expect(mkdirSpy).toHaveBeenCalledWith("/tmp/active-memory", { recursive: true });
+    const expectedDir = path.join(
+      stateDir,
+      "plugins",
+      "active-memory",
+      "transcripts",
+      "active-memory",
+    );
+    expect(mkdirSpy).toHaveBeenCalledWith(expectedDir, { recursive: true, mode: 0o700 });
     expect(runEmbeddedPiAgent.mock.calls.at(-1)?.[0]?.sessionFile).toMatch(
-      /^\/tmp\/active-memory\/active-memory-[a-z0-9]+-[a-f0-9]{8}\.jsonl$/,
+      new RegExp(
+        `^${escapeRegExp(expectedDir)}${escapeRegExp(path.sep)}active-memory-[a-z0-9]+-[a-f0-9]{8}\\.jsonl$`,
+      ),
     );
   });
 
