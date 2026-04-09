@@ -1166,12 +1166,23 @@ export default definePluginEntry({
   register(api: OpenClawPluginApi) {
     const config = normalizePluginConfig(api.pluginConfig);
     api.on("before_prompt_build", async (event, ctx) => {
-      const effectiveAgentId = resolveStatusUpdateAgentId(ctx);
+      const resolvedAgentId = resolveStatusUpdateAgentId(ctx);
+      const resolvedSessionKey =
+        ctx.sessionKey?.trim() ||
+        (resolvedAgentId
+          ? resolveCanonicalSessionKeyFromSessionId({
+              api,
+              agentId: resolvedAgentId,
+              sessionId: ctx.sessionId,
+            })
+          : undefined);
+      const effectiveAgentId =
+        resolvedAgentId || resolveStatusUpdateAgentId({ sessionKey: resolvedSessionKey });
       if (!isEnabledForAgent(config, effectiveAgentId)) {
         await persistPluginStatusLines({
           api,
           agentId: effectiveAgentId,
-          sessionKey: ctx.sessionKey,
+          sessionKey: resolvedSessionKey,
         });
         return;
       }
@@ -1179,7 +1190,7 @@ export default definePluginEntry({
         await persistPluginStatusLines({
           api,
           agentId: effectiveAgentId,
-          sessionKey: ctx.sessionKey,
+          sessionKey: resolvedSessionKey,
         });
         return;
       }
@@ -1187,7 +1198,7 @@ export default definePluginEntry({
         await persistPluginStatusLines({
           api,
           agentId: effectiveAgentId,
-          sessionKey: ctx.sessionKey,
+          sessionKey: resolvedSessionKey,
         });
         return;
       }
@@ -1200,7 +1211,7 @@ export default definePluginEntry({
         api,
         config,
         agentId: effectiveAgentId,
-        sessionKey: ctx.sessionKey,
+        sessionKey: resolvedSessionKey,
         sessionId: ctx.sessionId,
         query,
         currentModelProviderId: ctx.modelProviderId,

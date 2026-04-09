@@ -728,6 +728,12 @@ describe("active-memory plugin", () => {
     expect(runEmbeddedPiAgent.mock.calls.at(-1)?.[0]?.sessionKey).toMatch(
       /^agent:main:telegram:direct:12345:active-memory:[a-f0-9]{12}$/,
     );
+    expect(hoisted.sessionStore["agent:main:telegram:direct:12345"]?.pluginDebugEntries).toEqual([
+      {
+        pluginId: "active-memory",
+        lines: expect.arrayContaining([expect.stringContaining("🧩 Active Memory: ok")]),
+      },
+    ]);
   });
 
   it("clears stale status on skipped non-interactive turns even when agentId is missing", async () => {
