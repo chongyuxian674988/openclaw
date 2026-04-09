@@ -1277,6 +1277,8 @@ describe("active-memory plugin", () => {
       "plugins",
       "active-memory",
       "transcripts",
+      "agents",
+      "main",
       "active-memory-subagents",
     );
     expect(mkdirSpy).toHaveBeenCalledWith(expectedDir, { recursive: true, mode: 0o700 });
@@ -1321,7 +1323,46 @@ describe("active-memory plugin", () => {
       "plugins",
       "active-memory",
       "transcripts",
+      "agents",
+      "main",
       "active-memory",
+    );
+    expect(mkdirSpy).toHaveBeenCalledWith(expectedDir, { recursive: true, mode: 0o700 });
+    expect(runEmbeddedPiAgent.mock.calls.at(-1)?.[0]?.sessionFile).toMatch(
+      new RegExp(
+        `^${escapeRegExp(expectedDir)}${escapeRegExp(path.sep)}active-memory-[a-z0-9]+-[a-f0-9]{8}\\.jsonl$`,
+      ),
+    );
+  });
+
+  it("scopes persisted subagent transcripts by agent", async () => {
+    api.pluginConfig = {
+      agents: ["main", "support/agent"],
+      persistTranscripts: true,
+      transcriptDir: "active-memory-subagents",
+      logging: true,
+    };
+    plugin.register(api as unknown as OpenClawPluginApi);
+    const mkdirSpy = vi.spyOn(fs, "mkdir").mockResolvedValue(undefined);
+
+    await hooks.before_prompt_build(
+      { prompt: "what wings should i order? support agent transcript", messages: [] },
+      {
+        agentId: "support/agent",
+        trigger: "user",
+        sessionKey: "agent:support/agent:persist-transcript",
+        messageProvider: "webchat",
+      },
+    );
+
+    const expectedDir = path.join(
+      stateDir,
+      "plugins",
+      "active-memory",
+      "transcripts",
+      "agents",
+      "support%2Fagent",
+      "active-memory-subagents",
     );
     expect(mkdirSpy).toHaveBeenCalledWith(expectedDir, { recursive: true, mode: 0o700 });
     expect(runEmbeddedPiAgent.mock.calls.at(-1)?.[0]?.sessionFile).toMatch(

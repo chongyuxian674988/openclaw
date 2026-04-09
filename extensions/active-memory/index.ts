@@ -250,8 +250,20 @@ function resolveSafeTranscriptDir(baseSessionsDir: string, transcriptDir: string
   return candidate;
 }
 
-function resolvePersistentTranscriptBaseDir(api: OpenClawPluginApi): string {
-  return path.join(api.runtime.state.resolveStateDir(), "plugins", "active-memory", "transcripts");
+function toSafeTranscriptAgentDirName(agentId: string): string {
+  const encoded = encodeURIComponent(agentId.trim());
+  return encoded ? encoded : "unknown-agent";
+}
+
+function resolvePersistentTranscriptBaseDir(api: OpenClawPluginApi, agentId: string): string {
+  return path.join(
+    api.runtime.state.resolveStateDir(),
+    "plugins",
+    "active-memory",
+    "transcripts",
+    "agents",
+    toSafeTranscriptAgentDirName(agentId),
+  );
 }
 
 function resolveCanonicalSessionKeyFromSessionId(params: {
@@ -1201,7 +1213,7 @@ async function runRecallSubagent(params: {
     : await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-active-memory-"));
   const persistedDir = params.config.persistTranscripts
     ? resolveSafeTranscriptDir(
-        resolvePersistentTranscriptBaseDir(params.api),
+        resolvePersistentTranscriptBaseDir(params.api, params.agentId),
         params.config.transcriptDir,
       )
     : undefined;
