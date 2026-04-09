@@ -155,7 +155,7 @@ describe("buildStatusMessage", () => {
     expect(hidden).not.toContain("Active Memory: timeout 15s recent");
   });
 
-  it("merges legacy and structured plugin debug lines in verbose status", () => {
+  it("shows structured plugin debug lines in verbose status", () => {
     const visible = normalizeTestText(
       buildStatusMessage({
         agent: {
@@ -168,7 +168,6 @@ describe("buildStatusMessage", () => {
           pluginDebugEntries: [
             { pluginId: "active-memory", lines: ["🧩 Active Memory: ok 842ms recent 34 chars"] },
           ],
-          pluginStatusLines: ["Legacy Plugin: warmed cache"],
         },
         sessionKey: "agent:main:main",
         queue: { mode: "collect", depth: 0 },
@@ -176,7 +175,6 @@ describe("buildStatusMessage", () => {
     );
 
     expect(visible).toContain("Active Memory: ok 842ms recent 34 chars");
-    expect(visible).toContain("Legacy Plugin: warmed cache");
   });
 
   it("shows fast mode when enabled", () => {

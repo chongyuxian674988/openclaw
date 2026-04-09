@@ -242,18 +242,13 @@ export type SessionEntry = {
    * Each plugin owns and may overwrite only its own entry between turns.
    */
   pluginDebugEntries?: SessionPluginDebugEntry[];
-  /**
-   * Legacy flat plugin debug lines.
-   * Prefer `pluginDebugEntries` for new writes.
-   */
-  pluginStatusLines?: string[];
   acp?: SessionAcpMeta;
 };
 
 export function resolveSessionPluginDebugLines(
-  entry: Pick<SessionEntry, "pluginDebugEntries" | "pluginStatusLines"> | undefined,
+  entry: Pick<SessionEntry, "pluginDebugEntries"> | undefined,
 ): string[] {
-  const structured = Array.isArray(entry?.pluginDebugEntries)
+  return Array.isArray(entry?.pluginDebugEntries)
     ? entry.pluginDebugEntries.flatMap((pluginEntry) =>
         Array.isArray(pluginEntry?.lines)
           ? pluginEntry.lines.filter(
@@ -262,12 +257,6 @@ export function resolveSessionPluginDebugLines(
           : [],
       )
     : [];
-  const legacy = Array.isArray(entry?.pluginStatusLines)
-    ? entry.pluginStatusLines.filter(
-        (line): line is string => typeof line === "string" && line.trim().length > 0,
-      )
-    : [];
-  return [...structured, ...legacy];
 }
 
 export function normalizeSessionRuntimeModelFields(entry: SessionEntry): SessionEntry {

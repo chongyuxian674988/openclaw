@@ -146,8 +146,6 @@ type ActiveMemoryPromptStyle =
 
 const ACTIVE_MEMORY_STATUS_PREFIX = "🧩 Active Memory:";
 const ACTIVE_MEMORY_DEBUG_PREFIX = "🔎 Active Memory Debug:";
-const LEGACY_ACTIVE_MEMORY_STATUS_PREFIX = "Active Memory:";
-const LEGACY_ACTIVE_MEMORY_DEBUG_PREFIX = "Active Memory Debug:";
 const ACTIVE_MEMORY_PLUGIN_TAG = "active_memory_plugin";
 const ACTIVE_MEMORY_PLUGIN_GUIDANCE = [
   `When <${ACTIVE_MEMORY_PLUGIN_TAG}>...</${ACTIVE_MEMORY_PLUGIN_TAG}> appears, it is plugin-provided supplemental context.`,
@@ -637,19 +635,6 @@ function sanitizeDebugText(text: string): string {
   return sanitized.replace(/\s+/g, " ").trim();
 }
 
-function isLegacyActiveMemoryLine(line: unknown): line is string {
-  if (typeof line !== "string") {
-    return false;
-  }
-  const trimmed = line.trim();
-  return (
-    trimmed.startsWith(ACTIVE_MEMORY_STATUS_PREFIX) ||
-    trimmed.startsWith(ACTIVE_MEMORY_DEBUG_PREFIX) ||
-    trimmed.startsWith(LEGACY_ACTIVE_MEMORY_STATUS_PREFIX) ||
-    trimmed.startsWith(LEGACY_ACTIVE_MEMORY_DEBUG_PREFIX)
-  );
-}
-
 async function persistPluginStatusLines(params: {
   api: OpenClawPluginApi;
   agentId: string;
@@ -677,10 +662,7 @@ async function persistPluginStatusLines(params: {
       const hasActiveMemoryEntry = Array.isArray(existingEntry?.pluginDebugEntries)
         ? existingEntry.pluginDebugEntries.some((entry) => entry?.pluginId === "active-memory")
         : false;
-      const hasLegacyActiveMemoryLines = Array.isArray(existingEntry?.pluginStatusLines)
-        ? existingEntry.pluginStatusLines.some((line) => isLegacyActiveMemoryLine(line))
-        : false;
-      if (!hasActiveMemoryEntry && !hasLegacyActiveMemoryLines) {
+      if (!hasActiveMemoryEntry) {
         return;
       }
     }
@@ -693,9 +675,6 @@ async function persistPluginStatusLines(params: {
       const previousEntries = Array.isArray(existing.pluginDebugEntries)
         ? existing.pluginDebugEntries
         : [];
-      const previousLegacyLines = Array.isArray(existing.pluginStatusLines)
-        ? existing.pluginStatusLines
-        : [];
       const nextEntries = previousEntries.filter(
         (entry): entry is PluginDebugEntry =>
           Boolean(entry) &&
@@ -703,7 +682,6 @@ async function persistPluginStatusLines(params: {
           typeof entry.pluginId === "string" &&
           entry.pluginId !== "active-memory",
       );
-      const nextLegacyLines = previousLegacyLines.filter((line) => !isLegacyActiveMemoryLine(line));
       const nextLines: string[] = [];
       if (params.statusLine) {
         nextLines.push(params.statusLine);
@@ -720,7 +698,6 @@ async function persistPluginStatusLines(params: {
       store[resolved.normalizedKey] = {
         ...existing,
         pluginDebugEntries: nextEntries.length > 0 ? nextEntries : undefined,
-        pluginStatusLines: nextLegacyLines.length > 0 ? nextLegacyLines : undefined,
       };
     });
   } catch (error) {

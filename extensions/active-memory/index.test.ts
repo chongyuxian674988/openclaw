@@ -556,15 +556,20 @@ describe("active-memory plugin", () => {
     ]);
   });
 
-  it("replaces stale legacy active-memory lines on a later empty run", async () => {
-    const sessionKey = "agent:main:legacy-active-memory-lines";
+  it("replaces stale structured active-memory lines on a later empty run", async () => {
+    const sessionKey = "agent:main:stale-active-memory-lines";
     hoisted.sessionStore[sessionKey] = {
       sessionId: "s-main",
       updatedAt: 0,
-      pluginStatusLines: [
-        "Active Memory: ok 13.4s recent 1 mem",
-        "Active Memory Debug: Favorite desk snack: roasted almonds or cashews.",
-        "Other Plugin: keep me",
+      pluginDebugEntries: [
+        {
+          pluginId: "active-memory",
+          lines: [
+            "🧩 Active Memory: ok 13.4s recent 34 chars",
+            "🔎 Active Memory Debug: Favorite desk snack: roasted almonds or cashews.",
+          ],
+        },
+        { pluginId: "other-plugin", lines: ["Other Plugin: keep me"] },
       ],
     };
     runEmbeddedPiAgent.mockResolvedValueOnce({
@@ -583,22 +588,27 @@ describe("active-memory plugin", () => {
       [sessionKey]: {
         sessionId: "s-main",
         updatedAt: 0,
-        pluginStatusLines: [
-          "Active Memory: ok 13.4s recent 1 mem",
-          "Active Memory Debug: Favorite desk snack: roasted almonds or cashews.",
-          "Other Plugin: keep me",
+        pluginDebugEntries: [
+          {
+            pluginId: "active-memory",
+            lines: [
+              "🧩 Active Memory: ok 13.4s recent 34 chars",
+              "🔎 Active Memory Debug: Favorite desk snack: roasted almonds or cashews.",
+            ],
+          },
+          { pluginId: "other-plugin", lines: ["Other Plugin: keep me"] },
         ],
       },
     } as Record<string, Record<string, unknown>>;
     updater?.(store);
 
     expect(store[sessionKey]?.pluginDebugEntries).toEqual([
+      { pluginId: "other-plugin", lines: ["Other Plugin: keep me"] },
       {
         pluginId: "active-memory",
         lines: [expect.stringContaining("🧩 Active Memory: empty")],
       },
     ]);
-    expect(store[sessionKey]?.pluginStatusLines).toEqual(["Other Plugin: keep me"]);
   });
 
   it("returns nothing when the subagent says none", async () => {
