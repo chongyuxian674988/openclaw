@@ -141,6 +141,36 @@ type ActiveMemoryToggleStore = {
   sessions?: Record<string, { disabled?: boolean; updatedAt?: number }>;
 };
 
+type AsyncLock = <T>(task: () => Promise<T>) => Promise<T>;
+
+const toggleStoreLocks = new Map<string, AsyncLock>();
+
+function createAsyncLock(): AsyncLock {
+  let lock: Promise<void> = Promise.resolve();
+  return async function withLock<T>(task: () => Promise<T>): Promise<T> {
+    const previous = lock;
+    let release: (() => void) | undefined;
+    lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await task();
+    } finally {
+      release?.();
+    }
+  };
+}
+
+function withToggleStoreLock<T>(statePath: string, task: () => Promise<T>): Promise<T> {
+  let withLock = toggleStoreLocks.get(statePath);
+  if (!withLock) {
+    withLock = createAsyncLock();
+    toggleStoreLocks.set(statePath, withLock);
+  }
+  return withLock(task);
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -313,8 +343,13 @@ async function readToggleStore(statePath: string): Promise<ActiveMemoryToggleSto
 
 async function writeToggleStore(statePath: string, store: ActiveMemoryToggleStore): Promise<void> {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
-  await fs.writeFile(`${statePath}.tmp`, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-  await fs.rename(`${statePath}.tmp`, statePath);
+  const tempPath = `${statePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(tempPath, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+    await fs.rename(tempPath, statePath);
+  } finally {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+  }
 }
 
 async function isSessionActiveMemoryDisabled(params: {
@@ -342,14 +377,16 @@ async function setSessionActiveMemoryDisabled(params: {
   disabled: boolean;
 }): Promise<void> {
   const statePath = resolveToggleStatePath(params.api);
-  const store = await readToggleStore(statePath);
-  const sessions = { ...store.sessions };
-  if (params.disabled) {
-    sessions[params.sessionKey] = { disabled: true, updatedAt: Date.now() };
-  } else {
-    delete sessions[params.sessionKey];
-  }
-  await writeToggleStore(statePath, Object.keys(sessions).length > 0 ? { sessions } : {});
+  await withToggleStoreLock(statePath, async () => {
+    const store = await readToggleStore(statePath);
+    const sessions = { ...store.sessions };
+    if (params.disabled) {
+      sessions[params.sessionKey] = { disabled: true, updatedAt: Date.now() };
+    } else {
+      delete sessions[params.sessionKey];
+    }
+    await writeToggleStore(statePath, Object.keys(sessions).length > 0 ? { sessions } : {});
+  });
 }
 
 function resolveCommandSessionKey(params: {
@@ -398,6 +435,10 @@ function isActiveMemoryGloballyEnabled(cfg: OpenClawConfig): boolean {
   }
   const pluginConfig = asRecord(entry?.config);
   return pluginConfig?.enabled !== false;
+}
+
+function resolveActiveMemoryPluginConfigFromConfig(cfg: OpenClawConfig): unknown {
+  return asRecord(cfg.plugins?.entries?.["active-memory"])?.config;
 }
 
 function updateActiveMemoryGlobalEnabledInConfig(
@@ -1343,7 +1384,13 @@ export default definePluginEntry({
   name: "Active Memory",
   description: "Proactively surfaces relevant memory before eligible conversational replies.",
   register(api: OpenClawPluginApi) {
-    const config = normalizePluginConfig(api.pluginConfig);
+    let config = normalizePluginConfig(api.pluginConfig);
+    const refreshLiveConfigFromRuntime = () => {
+      config = normalizePluginConfig(
+        resolveActiveMemoryPluginConfigFromConfig(api.runtime.config.loadConfig()) ??
+          api.pluginConfig,
+      );
+    };
     api.registerCommand({
       name: "active-memory",
       description: "Enable, disable, or inspect Active Memory for this session.",
@@ -1365,11 +1412,13 @@ export default definePluginEntry({
           if (action === "on" || action === "enable" || action === "enabled") {
             const nextConfig = updateActiveMemoryGlobalEnabledInConfig(currentConfig, true);
             await api.runtime.config.writeConfigFile(nextConfig);
+            refreshLiveConfigFromRuntime();
             return { text: "Active Memory: on globally." };
           }
           if (action === "off" || action === "disable" || action === "disabled") {
             const nextConfig = updateActiveMemoryGlobalEnabledInConfig(currentConfig, false);
             await api.runtime.config.writeConfigFile(nextConfig);
+            refreshLiveConfigFromRuntime();
             return { text: "Active Memory: off globally." };
           }
         }

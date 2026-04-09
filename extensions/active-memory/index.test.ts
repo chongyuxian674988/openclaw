@@ -244,6 +244,18 @@ describe("active-memory plugin", () => {
 
     expect(statusOffResult.text).toBe("Active Memory: off globally.");
 
+    await hooks.before_prompt_build(
+      { prompt: "what wings should i order while global active memory is off?", messages: [] },
+      {
+        agentId: "main",
+        trigger: "user",
+        sessionKey: "agent:main:global-toggle",
+        messageProvider: "webchat",
+      },
+    );
+
+    expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+
     const onResult = await command.handler({
       channel: "webchat",
       isAuthorizedSender: true,
@@ -269,6 +281,18 @@ describe("active-memory plugin", () => {
         },
       },
     });
+
+    await hooks.before_prompt_build(
+      { prompt: "what wings should i order after global active memory is back on?", messages: [] },
+      {
+        agentId: "main",
+        trigger: "user",
+        sessionKey: "agent:main:global-toggle",
+        messageProvider: "webchat",
+      },
+    );
+
+    expect(runEmbeddedPiAgent).toHaveBeenCalledTimes(1);
   });
 
   it("does not run for agents that are not explicitly targeted", async () => {
